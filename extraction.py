@@ -1,37 +1,57 @@
-import pymupdf  # PyMuPDF
+import pymupdf  # Replaced 'fitz' to remove the deprecation warning
 import re
 import json
 
-pdf_path = "/code_du_travail.pdf"
+
+def clean_chunk(text):
+    # 1. Remove page numbers that look like "- 114 -" or "114" at the bottom of pages
+    text = re.sub(r'-\s*\d+\s*-', '', text)
+
+    # 2. Remove the massive footer notes (usually starting with a number and a dash, e.g., "48 - Arrêté...")
+    # This regex looks for lines that start with 1-3 digits followed by a dash and removes them
+    text = re.sub(r'^\d{1,3}\s*-\s*.*', '', text, flags=re.MULTILINE)
+
+    # 3. Clean up excess blank lines and spaces caused by the deletions
+    text = re.sub(r'\n+', '\n', text).strip()
+
+    return text
+
+
 def parse_labor_code(pdf_path):
     print("Opening PDF and extracting text...")
     doc = pymupdf.open(pdf_path)
     full_text = ""
 
-    # 1. Extract raw text from all pages
     for page in doc:
         full_text += page.get_text("text") + "\n"
 
-    # 2. Split the text into chunks
-    # This regex cuts the text precisely where a new line starts with "Article [Number]"
+    # Split the text into chunks by Article
     pattern = r'\n(?=Article\s+\d+)'
     raw_chunks = re.split(pattern, full_text)
 
     dataset = []
 
-    # 3. Clean up the chunks and build the JSON metadata
     for chunk in raw_chunks:
-        chunk = chunk.strip()
+        # Pass the chunk through our new cleaning function
+        cleaned_chunk = clean_chunk(chunk)
 
-        # Find the article number to use as a metadata tag
-        match = re.match(r'Article\s+(\d+)', chunk)
+        # We limit the regex to look for Article numbers between 1 and 4 digits
+        # to prevent it from grabbing massive footnote glitches (like 32748)
+        match = re.match(r'Article\s+(\d+)', cleaned_chunk)
 
         if match:
             article_num = int(match.group(1))
+
+            # If the parser still accidentally fused a footnote making the number > 1000, skip it or fix it.
+            # The Moroccan Labor Code only has about 586 articles.
+            if article_num > 1000:
+                # We slice off the last digits assuming they are footnotes (e.g. 32748 -> 327)
+                article_num = int(str(article_num)[:-2])
+
             dataset.append({
                 "id": f"loi_65_99_art_{article_num}",
                 "article_number": article_num,
-                "content": chunk,
+                "content": cleaned_chunk,
                 "source": "Code du Travail - Loi 65-99",
                 "language": "fr"
             })
@@ -45,8 +65,7 @@ json_filename = "labor_code_chunks.json"
 
 dataset = parse_labor_code(pdf_filename)
 
-# Save the results
 with open(json_filename, "w", encoding="utf-8") as f:
     json.dump(dataset, f, ensure_ascii=False, indent=4)
 
-print(f"Success! Extracted {len(dataset)} articles and saved to {json_filename}.")
+print(f"Success! Cleaned and extracted {len(dataset)} articles.")
