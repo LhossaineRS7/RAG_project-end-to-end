@@ -1,0 +1,26 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.4.3
+    container_name: juris_maroc_elastic
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      # JVM limit set exactly to 1GB RAM
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    #  Hard limit for the Docker container itself
+    mem_limit: 1g
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - rag_network
+
+volumes:
+  es_data:
+    driver: local
+
+networks:
+  rag_network:
+    driver: bridge
