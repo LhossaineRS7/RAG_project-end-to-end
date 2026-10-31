@@ -9,3 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .env
+idea/
+.ipynb_checkpoints/
+labor_code_chunks.json
+*.pdf
